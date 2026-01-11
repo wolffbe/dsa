@@ -1,0 +1,50 @@
+name: Daily Update
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Run at 8 AM UTC daily
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas numpy scikit-learn matplotlib vaderSentiment python-dotenv requests hopsworks==4.2.10
+      
+      - name: Run daily data fetch
+        env:
+          NEWS_API_TOKEN: ${{ secrets.NEWS_API_TOKEN }}
+          NEWS_API_PLAN: basic
+        run: python src/daily.py
+      
+      - name: Upload features to Hopsworks
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+        run: python src/feature_pipeline.py
+      
+      - name: Run inference pipeline
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+        run: python src/inference_pipeline.py
+      
+      - name: Commit updated CSV files
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add csv/*.csv
+          git diff --staged --quiet || git commit -m "Daily update $(date +%Y-%m-%d)"
+          git push
