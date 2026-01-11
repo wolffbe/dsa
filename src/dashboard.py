@@ -33,7 +33,13 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
-from config import COMBINED_CSV, PREDICTIONS_CSV
+# Import config with fallback for Streamlit Cloud
+try:
+    from config import COMBINED_CSV, PREDICTIONS_CSV
+except ImportError:
+    # Fallback paths for Streamlit Cloud
+    COMBINED_CSV = "csv/dsa_news_combined.csv"
+    PREDICTIONS_CSV = "csv/predictions_history.csv"
 
 
 # ============================================================================
@@ -72,34 +78,6 @@ def load_predictions():
     return pd.DataFrame()
 
 
-def try_load_from_hopsworks():
-    """Try to load data from Hopsworks Feature Store."""
-    try:
-        from hopsworks_utils import get_feature_store, get_prediction_history
-        fs = get_feature_store()
-        
-        # Get predictions (version 4)
-        pred_df = get_prediction_history(fs, limit=100)
-        
-        # Show debug info
-        if pred_df.empty:
-            st.warning("Predictions DataFrame is empty from Hopsworks")
-        else:
-            st.success(f"Loaded {len(pred_df)} predictions from Hopsworks")
-        
-        # Filter out sentinel values (-1 means no actual value yet)
-        if not pred_df.empty and 'actual' in pred_df.columns:
-            pred_df.loc[pred_df['actual'] == -1, 'actual'] = None
-        
-        # Get historical data from local CSV (Hopsworks read has issues)
-        hist_df = load_historical_data()
-        
-        return hist_df, pred_df, True
-    except Exception as e:
-        st.error(f"Hopsworks error: {e}")
-        return None, None, False
-
-
 # ============================================================================
 # DASHBOARD LAYOUT
 # ============================================================================
@@ -110,24 +88,12 @@ def main():
     
     # Sidebar
     st.sidebar.header("Settings")
-    data_source = st.sidebar.radio(
-        "Data Source",
-        ["Local CSV", "Hopsworks Feature Store"],
-        index=0
-    )
     
     days_to_show = st.sidebar.slider("Days to display", 7, 365, 90)
     
-    # Load data
-    if data_source == "Hopsworks Feature Store":
-        hist_df, pred_df, success = try_load_from_hopsworks()
-        if not success:
-            st.warning("Could not connect to Hopsworks. Falling back to local CSV.")
-            hist_df = load_historical_data()
-            pred_df = load_predictions()
-    else:
-        hist_df = load_historical_data()
-        pred_df = load_predictions()
+    # Load data from CSV files
+    hist_df = load_historical_data()
+    pred_df = load_predictions()
     
     if hist_df.empty:
         st.error("No historical data found. Run `make backfill` first.")

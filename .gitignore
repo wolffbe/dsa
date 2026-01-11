@@ -1,4 +1,7 @@
 model
 .env
-csv
-__pycache__.venv/
+__pycache__
+.venv/
+
+# Keep CSV files for dashboard but ignore large ones
+csv/news_history.csv
